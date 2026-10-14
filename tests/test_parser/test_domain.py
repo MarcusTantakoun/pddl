@@ -26,6 +26,16 @@ from pddl.exceptions import (
     PDDLValidationError,
 )
 from pddl.logic.base import And, ExistsCondition, ForallCondition, Not
+from pddl.logic.constraints import (
+    Always,
+    AtMostOnce,
+    HoldAfter,
+    HoldDuring,
+    Sometime,
+    SometimeAfter,
+    SometimeBefore,
+    Within,
+)
 from pddl.logic.effects import Forall, When
 from pddl.logic.functions import (
     BinaryFunction,
@@ -38,6 +48,7 @@ from pddl.logic.functions import (
     UnaryMinus,
 )
 from pddl.logic.predicates import EqualTo, Predicate
+from pddl.logic.preferences import Preference
 from pddl.logic.temporal import (
     Duration,
     SimpleDurationConstraint,
@@ -1507,3 +1518,242 @@ def test_parse_durative_effect_conditional_and() -> None:
     assert isinstance(action.effect, TimedEffect)
     assert isinstance(action.effect.effect, And)
     assert {str(operand) for operand in action.effect.effect.operands} == {"(p)", "(q)"}
+
+
+def test_parse_domain_constraints_basic() -> None:
+    """Test parsing a domain with basic constraints."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :constraints)
+        (:predicates (p) (q))
+        (:constraints (and (always (p)) (sometime (q))))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    assert domain.constraints == And(Always(Predicate("p")), Sometime(Predicate("q")))
+
+
+def test_parse_domain_constraints_all_operators() -> None:
+    """Test parsing a domain using every constraint operator."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :constraints)
+        (:predicates (p) (q))
+        (:constraints (and
+            (always (p))
+            (sometime (q))
+            (within 5 (p))
+            (at-most-once (q))
+            (sometime-after (p) (q))
+            (sometime-before (q) (p))
+            (always-within 3 (p) (q))
+            (hold-during 2 6 (p))
+            (hold-after 1 (q))
+            (at end (p))))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    assert isinstance(domain.constraints, And)
+    assert len(domain.constraints.operands) == 10
+    assert domain.constraints.operands[2] == Within(5, Predicate("p"))
+    assert domain.constraints.operands[4] == SometimeAfter(
+        Predicate("p"), Predicate("q")
+    )
+    assert domain.constraints.operands[7] == HoldDuring(2, 6, Predicate("p"))
+
+
+def test_parse_domain_constrains_forall() -> None:
+    """Test parsing a forall constraint."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :typing :constraints :universal-preconditions)
+        (:types t1)
+        (:predicates (p ?x - t1))
+        (:constraints (forall (?x - t1) (always (p ?x))))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    assert isinstance(domain.constraints, ForallCondition)
+    (variable,) = tuple(domain.constraints.variables)
+    assert variable.name == "x"
+    assert variable.type_tags == {"t1"}
+
+
+def test_parse_domain_constraint_preference_named() -> None:
+    """Test parsing a named preference constraint."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :constraints :preferences)
+        (:predicates (p))
+        (:constraints (preference pref1 (always (p))))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    assert domain.constraints == Preference(Always(Predicate("p")), name="pref1")
+
+
+def test_parse_domain_constraint_preferences_anonymous() -> None:
+    """Test parsing an anonymous preference constraint."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :constraints :preferences)
+        (:predicates (p))
+        (:constraints (preference (sometime (p))))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    assert domain.constraints == Preference(Sometime(Predicate("p")))
+
+
+def test_domain_constraints_missing_requirement() -> None:
+    """Test that constraints withoutn :constraints raises an error."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips)
+        (:predicates (p))
+        (:constraints (always (p)))
+    )
+    """)
+    with pytest.raises(PDDLMissingRequirementError):
+        DomainParser()(domain_str)
+
+
+def test_domain_constraint_preference_missing_requirement() -> None:
+    """Test that a preference constraint without :preferences raises an error."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :constraints)
+        (:predicates (p))
+        (:constraints (preference (always (p))))
+    )
+    """)
+    with pytest.raises(PDDLMissingRequirementError):
+        DomainParser()(domain_str)
+
+
+def test_parse_action_precondition_preference() -> None:
+    """Test parsing a preference in a classical action precondition."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :preferences)
+        (:predicates (p))
+        (:action a
+            :parameters ()
+            :precondition (preference pref1 (p))
+            :effect (p))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    action = next(iter(domain.actions))
+    assert action.precondition == Preference(Predicate("p"), name="pref1")
+
+
+def test_domain_constraints_round_trip() -> None:
+    """Test that a domain with constraints round-trips through str()."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :typing :constraints :preferences :universal-preconditions)
+        (:types t1)
+        (:predicates (p ?x - t1) (q))
+        (:constraints (and
+            (always (q))
+            (sometime (q))
+            (within 5 (q))
+            (at-most-once (q))
+            (sometime-after (q) (q))
+            (sometime-before (q) (q))
+            (always-within 3 (q) (q))
+            (hold-during 2 6 (q))
+            (hold-after 1 (q))
+            (at end (q))
+            (forall (?x - t1) (preference pref1 (sometime (p ?x))))))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    assert DomainParser()(str(domain)) == domain
+
+
+def test_parse_action_precondition_anonymous_preference() -> None:
+    """Test an anonymous preference in a precondition."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :preferences)
+        (:predicates (p))
+        (:action a
+            :parameters ()
+            :precondition (preference (p))
+            :effect (p))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    action = next(iter(domain.actions))
+    assert action.precondition == Preference(Predicate("p"))
+
+
+def test_action_precondition_preference_missing_requirement() -> None:
+    """Test that a precondition preference without :preferences raises."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips)
+        (:predicates (p))
+        (:action a
+            :parameters ()
+            :precondition (preference (p))
+            :effect (p))
+    )
+    """)
+    with pytest.raises(PDDLMissingRequirementError):
+        DomainParser()(domain_str)
+
+
+def test_parse_durative_action_preference() -> None:
+    """Test a preference in a durative action condition."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :durative-actions :preferences)
+        (:predicates (p))
+        (:durative-action a
+            :parameters ()
+            :duration (= ?duration 1)
+            :condition (preference pref1 (at start (p)))
+            :effect (at end (p)))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    action = next(iter(domain.durative_actions))
+    assert action.condition == Preference(
+        TimedCondition(TimeSpecifier.START, Predicate("p")), name="pref1"
+    )
+
+
+def test_constraint_forall_missing_requirement() -> None:
+    """Test that a forall constraint needs universal.quantified preconditions."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :typing :constraints)
+        (:types t1)
+        (:predicates (p ?x - t1))
+        (:constraints (forall (?x - t1) (always (p ?x))))
+    )
+    """)
+    with pytest.raises(PDDLMissingRequirementError):
+        DomainParser()(domain_str)
+
+
+def test_parse_precondition_preference_inside_and() -> None:
+    """Test a preference nested inside an and in a precondition (<pre-GD>)."""
+    domain_str = dedent("""
+    (define (domain test)
+        (:requirements :strips :preferences)
+        (:predicates (p) (q))
+        (:action a
+            :parameters ()
+            :precondition (and (p) (preference pref1 (q)))
+            :effect (p))
+    )
+    """)
+    domain = DomainParser()(domain_str)
+    action = next(iter(domain.actions))
+    assert action.precondition == And(
+        Predicate("p"), Preference(Predicate("q"), name="pref1")
+    )

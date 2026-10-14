@@ -18,9 +18,14 @@ import pytest
 from lark import ParseError
 
 from pddl.core import Domain
-from pddl.exceptions import PDDLParsingError, PDDLValidationError
+from pddl.exceptions import (
+    PDDLMissingRequirementError,
+    PDDLParsingError,
+    PDDLValidationError,
+)
 from pddl.logic import Predicate
-from pddl.logic.base import And, Not
+from pddl.logic.base import And, Not, ForallCondition
+from pddl.logic.constraints import Sometime
 from pddl.logic.functions import (
     EqualTo,
     GreaterEqualThan,
@@ -30,6 +35,7 @@ from pddl.logic.functions import (
     NumericValue,
     UnaryMinus,
 )
+from pddl.logic.preferences import IsViolated, Preference
 from pddl.logic.temporal import TimedInitialLiteral
 from pddl.logic.terms import Constant
 from pddl.parser.domain import DomainParser
@@ -393,3 +399,115 @@ def test_parse_invalid_init_element() -> None:
     """)
     with pytest.raises(ParseError):
         ProblemParser()(problem_str)
+
+
+def test_parse_goal_with_preference() -> None:
+    """Test parsing a goal with a preference."""
+    problem_str = dedent("""
+    (define (problem test-problem)
+        (:domain test-domain)
+        (:requirements :strips :preferences)
+        (:objects a)
+        (:init (p a))
+        (:goal (preference pref1 (p a))))
+    """)
+    problem = ProblemParser()(problem_str)
+    assert problem.goal == Preference(Predicate("p", Constant("a")), name="pref1")
+
+
+def test_parse_problem_constraints_and_metric_is_violated() -> None:
+    """Test parsing problem constraints and a metric with is-violated."""
+    problem_str = dedent("""
+    (define (problem test-problem)
+        (:domain test-domain)
+        (:requirements :strips :constraints :preferences)
+        (:objects a)
+        (:init (p a))
+        (:goal (preference pref1 (p a)))
+        (:constraints (sometime (p a)))
+        (:metric minimize (is-violated pref1)))
+    """)
+    problem = ProblemParser()(problem_str)
+    assert problem.constraints == Sometime(Predicate("p", Constant("a")))
+    assert problem.goal == Preference(Predicate("p", Constant("a")), name="pref1")
+    assert problem.metric is not None
+    assert problem.metric.expression == IsViolated("pref1")
+
+
+def test_problem_constraints_missing_requirement() -> None:
+    """Test that problem constraint without :constraints raises an error."""
+    problem_str = dedent("""
+    (define (problem test-problem)
+        (:domain test-domain)
+        (:requirements :strips)
+        (:objects a)
+        (:init (p a))
+        (:goal (p a))
+        (:constraints (sometime (p a))))
+    """)
+    with pytest.raises(PDDLMissingRequirementError):
+        ProblemParser()(problem_str)
+
+
+def test_problem_constraints_round_trip() -> None:
+    """Test that a problem with constraints round-trips withough str()."""
+    problem_str = dedent("""
+    (define (problem test-problem)
+        (:domain test-domain)
+        (:requirements :strips :constraints :preferences)
+        (:objects a)
+        (:init (p a))
+        (:goal (preference pref1 (p a)))
+        (:constraints (and (sometime (p a)) (at end (p a)))))
+    """)
+    problem = ProblemParser()(problem_str)
+    assert ProblemParser()(str(problem)) == problem
+
+
+def test_parse_problem_constraint_preference() -> None:
+    """Test a preference nested inside problem constraints."""
+    problem_str = dedent("""
+    (define (problem test-problem)
+        (:domain test-domain)
+        (:requirements :strips :constraints :preferences)
+        (:objects a)
+        (:init (p a))
+        (:goal (p a))
+        (:constraints (preference pref1 (sometime (p a)))))
+    """)
+    problem = ProblemParser()(problem_str)
+    assert problem.constraints == Preference(
+        Sometime(Predicate("p", Constant("a"))), name="pref1"
+    )
+
+
+def test_parse_goal_preference_inside_and() -> None:
+    """Test a preference nested inside an and in the goal (<pre-GD>)."""
+    problem_str = dedent("""
+    (define (problem test-problem)
+        (:domain test-domain)
+        (:requirements :strips :preferences)
+        (:objects a)
+        (:init (p a))
+        (:goal (and (p a) (preference pref1 (q a)))))
+    """)
+    problem = ProblemParser()(problem_str)
+    assert problem.goal == And(
+        Predicate("p", Constant("a")),
+        Preference(Predicate("q", Constant("a")), name="pref1"),
+    )
+
+
+def test_parse_goal_preference_inside_forall() -> None:
+    """Test a preference nested inside a forall in the goal (<pre-GD>)."""
+    problem_str = dedent("""
+    (define (problem test-problem)
+        (:domain test-domain)
+        (:requirements :strips :typing :preferences :universal-preconditions)
+        (:objects a - t1)
+        (:init (p a))
+        (:goal (forall (?x - t1) (preference pref1 (p ?x)))))
+    """)
+    problem = ProblemParser()(problem_str)
+    assert isinstance(problem.goal, ForallCondition)
+    assert isinstance(problem.goal.condition, Preference)

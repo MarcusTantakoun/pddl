@@ -71,6 +71,8 @@ DOMAIN_NAMES = [
     "satellite-temporal-satisficing",
     "airport-temporal-time-windows-strips",
     "rovers-time-automatic",
+    "trucks-preferences-complex",
+    "tpp-preferences-complex",
 ]
 
 PROBLEM_FILES = list(

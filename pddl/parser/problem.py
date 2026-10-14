@@ -18,7 +18,7 @@ from lark import ParseError, Transformer
 
 from pddl.core import Problem
 from pddl.custom_types import name
-from pddl.exceptions import PDDLParsingError
+from pddl.exceptions import PDDLMissingRequirementError, PDDLParsingError
 from pddl.helpers.base import assert_
 from pddl.logic.base import Not
 from pddl.logic.functions import (
@@ -33,12 +33,13 @@ from pddl.logic.functions import (
 )
 from pddl.logic.functions import EqualTo as FunctionEqualTo
 from pddl.logic.predicates import EqualTo, Predicate
+from pddl.logic.preferences import IsViolated
 from pddl.logic.temporal import TimedInitialLiteral
 from pddl.logic.terms import Constant
 from pddl.parser.base import BaseParser
 from pddl.parser.domain import DomainTransformer
 from pddl.parser.symbols import Symbols, TemporalSymbols
-from pddl.requirements import Requirements
+from pddl.requirements import Requirements, _extend_domain_requirements
 
 
 class ProblemTransformer(Transformer[Any, Problem]):
@@ -50,6 +51,7 @@ class ProblemTransformer(Transformer[Any, Problem]):
 
         self._domain_transformer = DomainTransformer()
         self._objects_by_name: Dict[str, Constant] = {}
+        self._requirements: set = set()
 
     def start(self, args):
         """Process the rule 'start'."""
@@ -74,7 +76,12 @@ class ProblemTransformer(Transformer[Any, Problem]):
 
     def requirements(self, args):
         """Process the 'requirements' rule."""
-        return "requirements", {Requirements(r[1:]) for r in args[2:-1]}
+        self._requirements = {Requirements(r[1:]) for r in args[2:-1]}
+        self._domain_transformer._requirements = self._requirements
+        self._domain_transformer._extended_requirements = _extend_domain_requirements(
+            self._requirements
+        )
+        return "requirements", self._requirements
 
     def objects(self, args):
         """Process the 'problem_domain' rule."""
@@ -94,6 +101,14 @@ class ProblemTransformer(Transformer[Any, Problem]):
         :return: a typed list (name)
         """
         return self._domain_transformer.typed_list_name(args)
+
+    def typed_list_variable(self, args):
+        """Process the 'typed_list_variable' rule."""
+        return self._domain_transformer.typed_list_variable(args)
+
+    def type_def(self, args):
+        """Parse the 'type_def' rule."""
+        return self._domain_transformer.type_def(args)
 
     def domain__type_def(self, names):
         """Process a domain type def."""
@@ -150,6 +165,28 @@ class ProblemTransformer(Transformer[Any, Problem]):
         """Process the 'goal' rule."""
         return "goal", args[2]
 
+    def constraints_def(self, args):
+        """Process the 'constraints_def' rule."""
+        if Requirements.CONSTRAINTS not in self._requirements:
+            raise PDDLMissingRequirementError(Requirements.CONSTRAINTS)
+        return "constraints", args[2]
+
+    def pre_gd(self, args):
+        """Process the 'pre_gd' rule."""
+        return self._domain_transformer.pre_gd(args)
+
+    def pref_gd(self, args):
+        """Process the 'pref_gd' rule."""
+        return self._domain_transformer.pref_gd(args)
+
+    def con_gd(self, args):
+        """Process the 'con_gd' rule."""
+        return self._domain_transformer.con_gd(args)
+
+    def pref_con_gd(self, args):
+        """Process the 'pref_con_gd' rule."""
+        return self._domain_transformer.pref_con_gd(args)
+
     def gd(self, args):
         """Process the 'gd_name' rule."""
         result = self._domain_transformer.gd(args)
@@ -196,6 +233,8 @@ class ProblemTransformer(Transformer[Any, Problem]):
 
     def metric_f_exp(self, args):
         """Process the 'metric_f_exp' rule."""
+        if len(args) == 4 and args[1] == Symbols.IS_VIOLATED.value:
+            return IsViolated(args[2])
         if len(args) == 1:
             if not isinstance(args[0], NumericFunction):
                 return NumericValue(args[0])

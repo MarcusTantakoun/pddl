@@ -30,6 +30,7 @@ from pddl.exceptions import PDDLValidationError
 from pddl.helpers.base import check, ensure, ensure_set, find_cycle
 from pddl.logic import Predicate
 from pddl.logic.base import And, BinaryOp, QuantifiedCondition, UnaryOp
+from pddl.logic.constraints import AlwaysWithin, HoldAfter, HoldDuring, Within
 from pddl.logic.effects import Forall, When
 from pddl.logic.functions import (
     BinaryFunction,
@@ -40,6 +41,7 @@ from pddl.logic.functions import (
     UnaryMinus,
 )
 from pddl.logic.predicates import DerivedPredicate, EqualTo
+from pddl.logic.preferences import IsViolated, Preference
 from pddl.logic.temporal import (
     Duration,
     SimpleDurationConstraint,
@@ -362,6 +364,32 @@ class TypeChecker:
     def _(self, timed_initial_literal: TimedInitialLiteral) -> None:
         """Check types annotations of a PDDL timed initial literal."""
         self.check_type(timed_initial_literal.literal)
+
+    @check_type.register
+    def _(self, preference: Preference) -> None:
+        """Check types annotations of a PDDL preference."""
+        self.check_type(preference.body)
+
+    @check_type.register
+    def _(self, constraint: Within) -> None:
+        """Check types annotations of a '(within ...)' constraint."""
+        self.check_type(constraint.body)
+
+    @check_type.register
+    def _(self, constraint: HoldAfter) -> None:
+        """Check types annotations of a '(hold-after ...)' constraint."""
+        self.check_type(constraint.body)
+
+    @check_type.register
+    def _(self, constraint: HoldDuring) -> None:
+        """Check types annotations of a '(hold-during ...)' constraint."""
+        self.check_type(constraint.body)
+
+    @check_type.register
+    def _(self, constraint: AlwaysWithin) -> None:
+        """Check types annotations of an '(always-within ...)' constraint."""
+        self.check_type(constraint.first)
+        self.check_type(constraint.second)
 
     @check_type.register
     def _(self, action: DurativeAction) -> None:

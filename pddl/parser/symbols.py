@@ -72,6 +72,18 @@ class Symbols(Enum):
     MAXIMIZE = "maximize"
     MINIMIZE = "minimize"
     TOTAL_COST = "total-cost"
+    CONSTRAINTS = ":constraints"
+    PREFERENCE = "preference"
+    ALWAYS = "always"
+    SOMETIME = "sometime"
+    WITHIN = "within"
+    AT_MOST_ONCE = "at-most-once"
+    SOMETIME_AFTER = "sometime-after"
+    SOMETIME_BEFORE = "sometime-before"
+    ALWAYS_WITHIN = "always-within"
+    HOLD_DURING = "hold-during"
+    HOLD_AFTER = "hold-after"
+    IS_VIOLATED = "is-violated"
 
 
 ALL_SYMBOLS: Set[str] = {v.value for v in Symbols}
@@ -115,6 +127,8 @@ class RequirementSymbols(Enum):
     DURATIVE_ACTIONS = ":durative-actions"
     DURATION_INEQUALITIES = ":duration-inequalities"
     TIMED_INITIAL_LITERALS = ":timed-initial-literals"
+    PREFERENCES = ":preferences"
+    CONSTRAINTS = ":constraints"
 
     def strip(self) -> str:
         """Strip the leading colon."""

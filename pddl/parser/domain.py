@@ -34,6 +34,17 @@ from pddl.durative_action import DurativeAction
 from pddl.exceptions import PDDLMissingRequirementError, PDDLParsingError
 from pddl.helpers.base import assert_
 from pddl.logic.base import And, ExistsCondition, ForallCondition, Imply, Not, OneOf, Or
+from pddl.logic.constraints import (
+    Always,
+    AlwaysWithin,
+    AtMostOnce,
+    HoldAfter,
+    HoldDuring,
+    Sometime,
+    SometimeAfter,
+    SometimeBefore,
+    Within,
+)
 from pddl.logic.effects import Forall, When
 from pddl.logic.functions import (
     Assign,
@@ -57,6 +68,7 @@ from pddl.logic.functions import (
 )
 from pddl.logic.functions import EqualTo as FunctionEqualTo
 from pddl.logic.predicates import DerivedPredicate, EqualTo, Predicate
+from pddl.logic.preferences import Preference
 from pddl.logic.temporal import (
     Duration,
     SimpleDurationConstraint,
@@ -369,6 +381,88 @@ class DomainTransformer(Transformer[Any, Domain]):
         }:
             raise PDDLParsingError(f"Invalid timed effect: ({first} {second} ...).")
         return TimedEffect(TimeSpecifier(second), args[3])
+
+    def constraints_def(self, args):
+        """Process the 'constraints_def' rule."""
+        if not self._has_requirement(Requirements.CONSTRAINTS):
+            raise PDDLMissingRequirementError(Requirements.CONSTRAINTS)
+        return dict(constraints=args[2])
+
+    def pre_gd(self, args):
+        """Process the 'pre_gd' rule."""
+        return self.gd(args)
+
+    def pref_gd(self, args):
+        """Process the 'pref_gd' rule."""
+        if not self._has_requirement(Requirements.PREFERENCES):
+            raise PDDLMissingRequirementError(Requirements.PREFERENCES)
+        if len(args) == 4:
+            return Preference(args[2])
+        return Preference(args[3], name=args[2])
+
+    def pref_timed_gd(self, args):
+        """Process the 'pref_timed_gd' rule."""
+        if not self._has_requirement(Requirements.PREFERENCES):
+            raise PDDLMissingRequirementError(Requirements.PREFERENCES)
+        if len(args) == 4:
+            return Preference(args[2])
+        return Preference(args[3], name=args[2])
+
+    def pref_con_gd(self, args):
+        """Process the 'pref_con_gd' rule."""
+        if not self._has_requirement(Requirements.PREFERENCES):
+            raise PDDLMissingRequirementError(Requirements.PREFERENCES)
+        if len(args) == 4:
+            return Preference(args[2])
+        return Preference(args[3], name=args[2])
+
+    def con_gd(self, args):
+        """Process the 'con_gd' rule."""
+        if len(args) == 1:
+            return args[0]
+        operator = args[1]
+        if operator == Symbols.AND.value:
+            return And(*args[2:-1])
+        if operator == Symbols.FORALL.value:
+            if not bool(
+                {
+                    Requirements.UNIVERSAL_PRECONDITION,
+                    Requirements.QUANTIFIED_PRECONDITION,
+                    Requirements.ADL,
+                }
+                & self._extended_requirements
+            ):
+                raise PDDLMissingRequirementError(Requirements.UNIVERSAL_PRECONDITION)
+            variables = [Variable(var_name, tags) for var_name, tags in args[3]]
+            return ForallCondition(cond=args[5], variables=variables)
+        if operator == Symbols.ALWAYS.value:
+            return Always(args[2])
+        if operator == Symbols.SOMETIME.value:
+            return Sometime(args[2])
+        if operator == Symbols.WITHIN.value:
+            return Within(self.num_literal([args[2]]), args[3])
+        if operator == Symbols.AT_MOST_ONCE.value:
+            return AtMostOnce(args[2])
+        if operator == Symbols.SOMETIME_AFTER.value:
+            return SometimeAfter(args[2], args[3])
+        if operator == Symbols.SOMETIME_BEFORE.value:
+            return SometimeBefore(args[2], args[3])
+        if operator == Symbols.ALWAYS_WITHIN.value:
+            return AlwaysWithin(self.num_literal([args[2]]), args[3], args[4])
+        if operator == Symbols.HOLD_DURING.value:
+            return HoldDuring(
+                self.num_literal([args[2]]),
+                self.num_literal([args[3]]),
+                args[4],
+            )
+        if operator == Symbols.HOLD_AFTER.value:
+            return HoldAfter(self.num_literal([args[2]]), args[3])
+        if (
+            str(operator) == TemporalSymbols.AT.value
+            and str(args[2]) == TemporalSymbols.END.value
+        ):
+            return TimedCondition(TimeSpecifier.END, args[3])
+        raise PDDLParsingError("Invalid constraint.")  # pragma: no cover
 
     def da_cond_effect(self, args):
         """Process the 'da_cond_effect' rule."""

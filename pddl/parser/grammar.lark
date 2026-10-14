@@ -1,6 +1,6 @@
 
 // PDDL DOMAIN
-domain:        LPAR DEFINE domain_def [requirements] [types] [constants] [predicates] [functions] structure_def* RPAR
+domain:        LPAR DEFINE domain_def [requirements] [types] [constants] [predicates] [functions] [constraints_def] structure_def* RPAR
 domain_def:    LPAR DOMAIN NAME RPAR
 
 requirements:              LPAR REQUIREMENTS require_key+ RPAR
@@ -9,6 +9,7 @@ types:                 LPAR TYPES typed_list_name RPAR
 constants:             LPAR CONSTANTS typed_list_name RPAR
 predicates:            LPAR PREDICATES atomic_formula_skeleton+ RPAR
 functions:             LPAR FUNCTIONS f_typed_list_atomic_function_skeleton RPAR
+constraints_def:       LPAR CONSTRAINTS con_gd RPAR
 
 atomic_formula_skeleton:   LPAR NAME typed_list_variable RPAR
 
@@ -37,10 +38,12 @@ simple_duration_constraint: LPAR d_op DURATION_VAR f_exp RPAR
      | EQUAL_OP
 
 da_gd:             timed_gd
+     |             pref_timed_gd
      |             LPAR AND da_gd* RPAR
      |             LPAR FORALL LPAR typed_list_variable RPAR da_gd RPAR
      |             LPAR RPAR
 timed_gd:          LPAR NAME NAME gd RPAR
+pref_timed_gd:     LPAR PREFERENCE NAME? timed_gd RPAR
 
 da_effect:         LPAR AND da_effect* RPAR
          |         timed_effect
@@ -55,9 +58,37 @@ da_p_effect:       LPAR NOT atomic_formula_term RPAR
            |       da_num_effect
 da_num_effect:     LPAR assign_op f_head f_exp_da RPAR
 
+// preferences
+pre_gd:            pref_gd
+      |            LPAR AND pre_gd* RPAR
+      |            LPAR FORALL LPAR typed_list_variable RPAR pre_gd RPAR
+      |            atomic_formula_term
+      |            LPAR OR gd* RPAR
+      |            LPAR NOT gd RPAR
+      |            LPAR IMPLY gd gd RPAR
+      |            LPAR EXISTS LPAR typed_list_variable RPAR gd RPAR
+      |            LPAR binary_comp f_exp f_exp RPAR
+pref_gd:           LPAR PREFERENCE NAME? gd RPAR
+
+// constraints
+con_gd:            LPAR AND con_gd* RPAR
+      |            LPAR FORALL LPAR typed_list_variable RPAR con_gd RPAR
+      |            LPAR NAME NAME gd RPAR
+      |            LPAR ALWAYS gd RPAR
+      |            LPAR SOMETIME gd RPAR
+      |            LPAR WITHIN NUMBER gd RPAR
+      |            LPAR AT_MOST_ONCE gd RPAR
+      |            LPAR SOMETIME_AFTER gd gd RPAR
+      |            LPAR SOMETIME_BEFORE gd gd RPAR
+      |            LPAR ALWAYS_WITHIN NUMBER gd gd RPAR
+      |            LPAR HOLD_DURING NUMBER NUMBER gd RPAR
+      |            LPAR HOLD_AFTER NUMBER gd RPAR
+      |            pref_con_gd
+pref_con_gd:       LPAR PREFERENCE NAME? con_gd RPAR
+
 // preconditions
 emptyor_pregd:     LPAR RPAR
-             |     gd
+             |     pre_gd
 gd:                atomic_formula_term
   |                LPAR OR gd* RPAR
   |                LPAR NOT gd RPAR
@@ -142,7 +173,7 @@ type_def:          LPAR EITHER primitive_type+ RPAR
 
 
 // PDDL PROBLEM
-problem:           LPAR DEFINE problem_def problem_domain [requirements] [objects] init goal [metric_spec] RPAR
+problem:           LPAR DEFINE problem_def problem_domain [requirements] [objects] init goal [constraints_def] [metric_spec] RPAR
 problem_def:       LPAR PROBLEM NAME RPAR
 problem_domain:    LPAR DOMAIN_P NAME RPAR
 
@@ -162,7 +193,7 @@ basic_function_term:   NAME
 
 atomic_formula_name:   LPAR predicate NAME* RPAR
 
-goal:  LPAR GOAL gd RPAR
+goal:  LPAR GOAL pre_gd RPAR
 
 metric_spec: LPAR METRIC optimization metric_f_exp RPAR
 
@@ -173,6 +204,7 @@ metric_f_exp: LPAR binary_op metric_f_exp metric_f_exp RPAR
             | LPAR multi_op metric_f_exp metric_f_exp+ RPAR
             | LPAR MINUS metric_f_exp RPAR
             | LPAR MINUS metric_f_exp metric_f_exp RPAR
+            | LPAR IS_VIOLATED NAME RPAR
             | basic_function_term
             | NUMBER
 
@@ -213,6 +245,8 @@ NAME: /[a-zA-Z][a-zA-Z0-9-_]*/
             | DURATIVE_ACTIONS
             | DURATION_INEQUALITIES
             | TIMED_INITIAL_LITERALS
+            | PREFERENCES
+            | CONSTRAINTS
 
 COMMENT: /;[^\n]*/
 
@@ -232,6 +266,18 @@ DURATIVE_ACTION: ":durative-action"
 DURATION: ":duration"
 CONDITION: ":condition"
 DURATION_VAR: "?duration"
+CONSTRAINTS: ":constraints"
+PREFERENCE: "preference"
+ALWAYS: "always"
+SOMETIME: "sometime"
+WITHIN: "within"
+AT_MOST_ONCE: "at-most-once"
+SOMETIME_AFTER: "sometime-after"
+SOMETIME_BEFORE: "sometime-before"
+ALWAYS_WITHIN: "always-within"
+HOLD_DURING: "hold-during"
+HOLD_AFTER: "hold-after"
+IS_VIOLATED: "is-violated"
 FORALL: "forall"
 EXISTS: "exists"
 WHEN: "when"
@@ -281,6 +327,7 @@ ACTION_COSTS: ":action-costs"
 DURATIVE_ACTIONS: ":durative-actions"
 DURATION_INEQUALITIES: ":duration-inequalities"
 TIMED_INITIAL_LITERALS: ":timed-initial-literals"
+PREFERENCES: ":preferences"
 
 // others
 LPAR : "("

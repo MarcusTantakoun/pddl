@@ -24,6 +24,7 @@ from pddl.durative_action import DurativeAction
 from pddl.exceptions import PDDLValidationError
 from pddl.logic import Constant, Variable
 from pddl.logic.base import And, Not
+from pddl.logic.constraints import Always
 from pddl.logic.functions import (
     Decrease,
     GreaterEqualThan,
@@ -39,6 +40,7 @@ from pddl.logic.functions import (
 from pddl.logic.functions import EqualTo as FunctionEqualTo
 from pddl.logic.helpers import constants, variables
 from pddl.logic.predicates import DerivedPredicate, Predicate
+from pddl.logic.preferences import Preference
 from pddl.logic.temporal import (
     Duration,
     SimpleDurationConstraint,
@@ -412,3 +414,19 @@ def test_domain_with_empty_durative_action_typechecks() -> None:
         durative_actions={action},
     )
     assert domain.durative_actions == {action}
+
+
+def test_build_domain_with_constraints() -> None:
+    """Test a PDDL domain with constraints and preferences."""
+    p = Predicate("p")
+    domain = Domain(
+        "domain_with_constraints",
+        requirements={
+            Requirements.STRIPS,
+            Requirements.CONSTRAINTS,
+            Requirements.PREFERENCES,
+        },
+        predicates={p},
+        constraints=Preference(Always(p), name="pref1"),
+    )
+    assert domain.constraints == Preference(Always(p), name="pref1")

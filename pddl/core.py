@@ -63,6 +63,7 @@ class Domain:
         functions: Optional[Collection[FunctionExpression]] = None,
         actions: Optional[Collection["Action"]] = None,
         durative_actions: Optional[Collection["DurativeAction"]] = None,
+        constraints: Optional[Formula] = None,
     ):
         """
         Initialize a PDDL domain.
@@ -86,6 +87,7 @@ class Domain:
         self._derived_predicates = ensure_set(derived_predicates)
         self._actions = ensure_set(actions)
         self._durative_actions = ensure_set(durative_actions)
+        self._constraints = constraints
         self._functions = Functions(functions, self._requirements)
 
         self._check_consistency()
@@ -97,6 +99,7 @@ class Domain:
         type_checker.check_type(self._predicates)
         type_checker.check_type(self._actions)
         type_checker.check_type(self._durative_actions)
+        type_checker.check_type(self._constraints)
         _check_types_in_has_terms_objects(self._actions, self._types.all_types)  # type: ignore
         _check_types_in_has_terms_objects(self._durative_actions, self._types.all_types)  # type: ignore
         self._check_types_in_derived_predicates()
@@ -151,6 +154,11 @@ class Domain:
         return self._durative_actions
 
     @property
+    def constraints(self) -> Optional[Formula]:
+        """Get the domain constraints."""
+        return self._constraints
+
+    @property
     def types(self) -> Dict[name_type, Optional[name_type]]:
         """Get the type definitions, if defined. Else, raise error."""
         return self._types.raw
@@ -168,6 +176,7 @@ class Domain:
             and self.derived_predicates == other.derived_predicates
             and self.actions == other.actions
             and self.durative_actions == other.durative_actions
+            and self.constraints == other.constraints
         )
 
     def __str__(self) -> str:
@@ -184,6 +193,8 @@ class Domain:
             body += print_types_or_functions_with_parents(
                 "(:functions", self.functions, ")\n", print_function_skeleton
             )
+        if self.constraints is not None:
+            body += f"(:constraints {self.constraints})\n"
         body += sort_and_print_collection(
             "",
             self.derived_predicates,
@@ -224,6 +235,7 @@ class Problem:
         init: Optional[Collection[Formula]] = None,
         goal: Optional[Formula] = None,
         metric: Optional[Metric] = None,
+        constraints: Optional[Formula] = None,
     ):
         """
         Initialize the PDDL problem.
@@ -250,6 +262,7 @@ class Problem:
         self._init: AbstractSet[Formula] = ensure_set(init)
         self._goal: Formula = ensure(goal, And())
         self._metric: Optional[Metric] = metric
+        self._constraints = constraints
         validate(
             all(
                 is_literal(formula) or isinstance(formula, TimedInitialLiteral)
@@ -327,6 +340,12 @@ class Problem:
         type_checker.check_type(self.objects)
         type_checker.check_type(self.init)
         type_checker.check_type(self.goal)
+        type_checker.check_type(self._constraints)
+        if self._constraints is not None:
+            validate(
+                Requirements.CONSTRAINTS in domain.requirements,
+                "constraints requirement is not specified, but constraints were used.",
+            )
         if any(isinstance(f, TimedInitialLiteral) for f in self.init):
             validate(
                 Requirements.TIMED_INITIAL_LITERALS in domain.requirements,
@@ -388,6 +407,11 @@ class Problem:
         """Get the metric."""
         return self._metric
 
+    @property
+    def constraints(self) -> Optional[Formula]:
+        """Get the problem constraints."""
+        return self._constraints
+
     def __eq__(self, other):
         """Compare with another object."""
         return (
@@ -400,6 +424,7 @@ class Problem:
             and self.init == other.init
             and self.goal == other.goal
             and self.metric == other.metric
+            and self.constraints == other.constraints
         )
 
     def __str__(self) -> str:
@@ -414,6 +439,8 @@ class Problem:
             "(:init ", self.init, ")\n", is_mandatory=True
         )
         body += f"{'(:goal ' + str(self.goal) + ')'}\n"
+        if self.constraints is not None:
+            body += f"(:constraints {self.constraints})\n"
         body += f"{'(:metric ' + str(self.metric) + ')'}\n" if self.metric else ""
         result = result + "\n" + indent(body, indentation) + "\n)"
         result = remove_empty_lines(result)

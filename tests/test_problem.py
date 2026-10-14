@@ -20,6 +20,7 @@ import pytest
 from pddl.core import Domain, Problem
 from pddl.exceptions import PDDLValidationError
 from pddl.logic.base import And, Not
+from pddl.logic.constraints import Sometime
 from pddl.logic.functions import EqualTo as FunctionEqualTo
 from pddl.logic.functions import (
     GreaterEqualThan,
@@ -222,3 +223,34 @@ def test_pickle_problem_with_timed_initial_literals() -> None:
         goal=p,
     )
     assert pickle.loads(pickle.dumps(problem)) == problem  # nosec
+
+
+def test_build_problem_with_constraints() -> None:
+    """Test a PDDL problem with constraints."""
+    a = constants("a")[0]
+    p = Predicate("p", a)
+    problem = Problem(
+        "problem_with_constraints",
+        domain_name="test-domain",
+        objects=[a],
+        init={p},
+        goal=p,
+        constraints=Sometime(p),
+    )
+    assert problem.constraints == Sometime(p)
+
+
+def test_problem_check_constraints_requirement_not_declared() -> None:
+    """Test that constraints require :constraints in the domain."""
+    domain = Domain("test-domain", requirements={Requirements.STRIPS})
+    a = constants("a")[0]
+    problem = Problem(
+        "test-problem",
+        domain_name="test-domain",
+        constraints=Sometime(Predicate("p", a)),
+    )
+    with pytest.raises(
+        PDDLValidationError,
+        match="constraints requirement is not specified",
+    ):
+        problem.check(domain)

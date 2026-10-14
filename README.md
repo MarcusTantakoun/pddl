@@ -191,8 +191,8 @@ requirements:
 - [x] `:duration-inequalities`
 - [x] `:derived-predicates`
 - [x] `:timed-initial-literals`
-- [ ] `:preferences`
-- [ ] `:constraints`
+- [x] `:preferences`
+- [x] `:constraints`
 - [x] `:action-costs`
 
 ## Development

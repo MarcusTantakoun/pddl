@@ -42,6 +42,8 @@ class Requirements(Enum):
     DURATIVE_ACTIONS = RS.DURATIVE_ACTIONS.strip()
     DURATION_INEQUALITIES = RS.DURATION_INEQUALITIES.strip()
     TIMED_INITIAL_LITERALS = RS.TIMED_INITIAL_LITERALS.strip()
+    PREFERENCES = RS.PREFERENCES.strip()
+    CONSTRAINTS = RS.CONSTRAINTS.strip()
 
     @classmethod
     def quantified_precondition_requirements(cls) -> Set["Requirements"]:
